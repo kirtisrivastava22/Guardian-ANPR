@@ -19,10 +19,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MODEL_PATH = os.path.join(
     BASE_DIR,
-    "new_runs",
-    "detect",
-    "train",
-    "weights",
+    "model",
     "best.pt"
 )
 

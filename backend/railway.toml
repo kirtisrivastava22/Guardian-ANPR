@@ -8,7 +8,7 @@ PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu"
 PIP_NO_CACHE_DIR = "1"
 
 [deploy]
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 healthcheckPath = "/docs"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
