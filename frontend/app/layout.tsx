@@ -1,24 +1,38 @@
+// @ts-ignore: Allow importing global CSS without type declarations
 import "./globals.css";
-import Sidebar from "../components/Sidebar";
+import Navbar from "../components/Navbar";
+import AlertToast from "../components/AlertToast";
+import {
+  AlertProvider,
+} from "../contexts/AlertContext";
 
 export const metadata = {
   title: "RoadEye LPR",
-  description: "License Plate Recognition System",
+  description:
+    "License Plate Recognition System",
   icons: {
     icon: "/icon.png",
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className="h-full">
-      <body className="flex min-h-screen bg-[#0B0F14]">
-  <Sidebar /> {/* w-64 */}
-  <main className="flex-1 p-8 overflow-y-auto"> {/* flex-1 takes the remaining width */}
-    {children}
-  </main>
-</body>
-    </html>
-  )
-}
+    <html lang="en">
+      <body className="bg-slate-50 min-h-screen">
+        <AlertProvider>
+          <Navbar />
 
+          <AlertToast />
+
+          <main className="max-w-7xl mx-auto px-8 py-8">
+            {children}
+          </main>
+        </AlertProvider>
+      </body>
+    </html>
+  );
+}

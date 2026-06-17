@@ -1,16 +1,26 @@
 """
 video_pipeline.py
 ─────────────────
-Detection + OCR pipeline for both single frames (WebSocket streaming)
-and full video file processing.
+Dual-model pipeline:
+  Model A — YOLOv8s pretrained on COCO  → detects vehicles (car, bus, truck,
+             motorcycle, bicycle) using the standard yolov8s.pt weights.
+             No training needed; COCO already covers all vehicle classes.
 
-Key fixes vs original:
-  1. Model path uses app/model/best.pt (place your best_1_.pt there renamed)
-  2. Video-optimised preprocessing: motion-deblur + CLAHE + 2× upscale
-  3. plate_buffer counts ints, not appends strings
-  4. f-string bug fixed on final log line
-  5. mp4v codec replaces H264 (universally supported)
-  6. process_license_plate guards against empty OCR text before putText
+  Model B — Your fine-tuned best.pt     → detects license plates only.
+
+Per-frame flow:
+  1. Run vehicle model on full frame   → draw YELLOW boxes + class label
+  2. Run plate model on full frame     → for each detected plate region:
+       a. Enhanced crop preprocessing
+       b. EasyOCR
+       c. Garbage filter (plate_postprocess)
+       d. If valid text → draw CYAN box + plate text above vehicle box
+  3. Return annotated frame
+
+Colors:
+  Vehicle box  → YELLOW  (0, 220, 255) in BGR
+  Plate box    → CYAN    (255, 220, 0) in BGR
+  Plate text   → GREEN   (0, 255, 80)  in BGR
 """
 
 import cv2
@@ -18,26 +28,72 @@ import numpy as np
 import os
 import logging
 from collections import defaultdict
-from app.detector.ocr import PlateOCR
 from ultralytics import YOLO
+from app.detector.ocr import PlateOCR
 import torch
 
 torch.set_grad_enabled(False)
 
 logger = logging.getLogger("lpr")
-logger.setLevel(logging.DEBUG)   # set to WARNING in production
-
-# ── Singletons ──────────────────────────────────────────────────────────────
-
-_ocr_engine: PlateOCR | None = None
-_model: YOLO | None = None
+logger.setLevel(logging.DEBUG)
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_PATH = os.path.join(BASE_DIR, "model", "best.pt")
+# ── Model paths ───────────────────────────────────────────────────────────────
+
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PLATE_MODEL_PATH   = os.path.join(BASE_DIR, "model", "best.pt")
+VEHICLE_MODEL_PATH = os.path.join(BASE_DIR, "model", "yolov8s.pt")
+# yolov8s.pt will be auto-downloaded by ultralytics on first run if not present
+
+# ── COCO class IDs that are vehicles ─────────────────────────────────────────
+# Full COCO list: https://docs.ultralytics.com/datasets/detect/coco/
+VEHICLE_CLASS_IDS = {
+    2:  "Car",
+    3:  "Motorcycle",
+    5:  "Bus",
+    7:  "Truck",
+    1:  "Bicycle",
+}
+
+# ── Annotation colours (BGR) ──────────────────────────────────────────────────
+COLOR_VEHICLE = (0,   210, 255)   # yellow-orange
+COLOR_PLATE   = (255, 200,   0)   # cyan-blue
+COLOR_TEXT    = (0,   255,  80)   # bright green
+
+FONT       = cv2.FONT_HERSHEY_SIMPLEX
+FONT_SCALE = 0.55
+THICKNESS  = 2
+
+# ── Singletons ────────────────────────────────────────────────────────────────
+
+_plate_model:   YOLO | None = None
+_vehicle_model: YOLO | None = None
+_ocr_engine:    PlateOCR | None = None
 
 plate_buffer: dict = defaultdict(int)
+
+
+def get_plate_model() -> YOLO:
+    global _plate_model
+    if _plate_model is None:
+        if not os.path.exists(PLATE_MODEL_PATH):
+            raise FileNotFoundError(
+                f"Plate model not found: {PLATE_MODEL_PATH}\n"
+                "Place your trained best.pt in app/model/"
+            )
+        logger.info(f"[INIT] Loading plate model: {PLATE_MODEL_PATH}")
+        _plate_model = YOLO(PLATE_MODEL_PATH)
+    return _plate_model
+
+
+def get_vehicle_model() -> YOLO:
+    global _vehicle_model
+    if _vehicle_model is None:
+        logger.info(f"[INIT] Loading vehicle model: {VEHICLE_MODEL_PATH}")
+        # Ultralytics auto-downloads yolov8s.pt if path not found
+        _vehicle_model = YOLO(VEHICLE_MODEL_PATH)
+    return _vehicle_model
 
 
 def get_ocr_engine() -> PlateOCR:
@@ -47,60 +103,27 @@ def get_ocr_engine() -> PlateOCR:
     return _ocr_engine
 
 
-def get_model() -> YOLO:
-    global _model
-    if _model is None:
-        if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(
-                f"Model not found at {MODEL_PATH}. "
-                "Place best.pt (your trained weights) in app/model/"
-            )
-        logger.info(f"[INIT] Loading YOLO model from {MODEL_PATH}")
-        _model = YOLO(MODEL_PATH)
-    return _model
+# ── Plate crop preprocessing ──────────────────────────────────────────────────
 
-
-# ── Video-frame preprocessing ────────────────────────────────────────────────
-
-def preprocess_for_detection(frame: np.ndarray) -> np.ndarray:
+def _enhance_plate_crop(crop: np.ndarray) -> np.ndarray:
     """
-    Light sharpening pass applied to the full frame BEFORE YOLO inference.
-    Counteracts the motion blur that's common in dashcam / traffic footage.
-    Keep it cheap — this runs on every frame.
-    """
-    kernel = np.array([[0, -0.5, 0],
-                       [-0.5, 3, -0.5],
-                       [0, -0.5, 0]], dtype=np.float32)
-    sharpened = cv2.filter2D(frame, -1, kernel)
-    return sharpened
-
-
-def preprocess_plate_crop(crop: np.ndarray) -> np.ndarray:
-    """
-    Aggressive enhancement applied to the small plate crop before OCR.
-    Handles:
-      • distant plates (tiny, blurry) → 2× upscale + sharpen
-      • night / uneven lighting       → CLAHE
-      • very dark plates              → adaptive threshold fallback
+    Aggressive enhancement for video-frame plate crops:
+    upscale → sharpen → CLAHE → optional threshold
     """
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
-    # Always upscale — plate crops from traffic video are tiny
     h, w = gray.shape[:2]
     target_h = max(64, h * 2)
-    scale = target_h / h
-    gray = cv2.resize(gray, None, fx=scale, fy=scale,
-                      interpolation=cv2.INTER_CUBIC)
+    scale    = target_h / h
+    gray     = cv2.resize(gray, (int(w * scale), target_h),
+                          interpolation=cv2.INTER_CUBIC)
 
-    # Sharpen after upscale
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-    gray = cv2.filter2D(gray, -1, kernel)
+    gray   = cv2.filter2D(gray, -1, kernel)
 
-    # CLAHE — fixes uneven lighting without blowing out bright plates
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
-    gray = clahe.apply(gray)
+    gray  = clahe.apply(gray)
 
-    # Adaptive threshold only for very dark crops
     if gray.mean() < 80:
         gray = cv2.adaptiveThreshold(
             gray, 255,
@@ -108,119 +131,217 @@ def preprocess_plate_crop(crop: np.ndarray) -> np.ndarray:
             cv2.THRESH_BINARY, 15, 4
         )
 
-    # Light bilateral denoise after threshold
     gray = cv2.bilateralFilter(gray, 5, 50, 50)
-
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
-# ── Core detection ───────────────────────────────────────────────────────────
+# ── Label drawing helpers ─────────────────────────────────────────────────────
 
-def detect_license_plate(image: np.ndarray):
+def _draw_label(image: np.ndarray, text: str, x: int, y: int,
+                color_box, color_text=(255, 255, 255), scale=0.52):
+    """Draw a filled-background label at (x, y)."""
+    (tw, th), baseline = cv2.getTextSize(text, FONT, scale, THICKNESS)
+    pad = 3
+    # Background rectangle
+    cv2.rectangle(image,
+                  (x - pad, y - th - pad - baseline),
+                  (x + tw + pad, y + pad),
+                  color_box, -1)
+    cv2.putText(image, text, (x, y - baseline),
+                FONT, scale, color_text, 1, cv2.LINE_AA)
+
+
+# ── Vehicle detection ─────────────────────────────────────────────────────────
+
+def detect_vehicles(image: np.ndarray) -> list[dict]:
     """
-    Run YOLO on one frame.  Returns (best_crop, annotated_image, confidence).
-    All three are None / original_image / 0.0 when nothing is found.
+    Run YOLOv8s on the frame and return all vehicle detections.
+    Each item: {bbox, conf, label}
     """
-    model = get_model()
-
-    if image is None or image.size == 0:
-        logger.error("[DETECT] Empty image received")
-        return None, image, 0.0
-
-    # Light full-frame sharpening to help with motion blur
-    proc = preprocess_for_detection(image)
-
+    model   = get_vehicle_model()
     results = model.predict(
-        source=proc,
-        imgsz=640,
-        conf=0.25,       # raised from 0.15 → fewer FPs from distant objects
-        iou=0.35,        # tighter NMS → cleaner detections in crowded scenes
-        device="cpu",
-        half=False,
-        verbose=False,
+        source  = image,
+        imgsz   = 640,
+        conf    = 0.35,
+        iou     = 0.45,
+        classes = list(VEHICLE_CLASS_IDS.keys()),
+        device  = "cpu",
+        verbose = False,
     )
 
+    vehicles = []
     if not results:
-        return None, image, 0.0
+        return vehicles
 
-    result = results[0]
-    if result.boxes is None or len(result.boxes) == 0:
-        logger.debug("[DETECT] No boxes in this frame")
-        return None, image, 0.0
-
-    best_plate = None
-    best_conf = 0.0
-    best_box = None
-
-    for box in result.boxes:
-        conf = float(box.conf[0])
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-
-        if x2 <= x1 or y2 <= y1:
+    for r in results:
+        if r.boxes is None:
             continue
-        if (x2 - x1) < 20 or (y2 - y1) < 8:
-            continue            # too small to be a real plate
-
-        if conf > best_conf:
-            crop = image[y1:y2, x1:x2]   # crop from ORIGINAL (not sharpened)
-            if crop.size > 0:
-                best_plate = crop
-                best_conf = conf
-                best_box = (x1, y1, x2, y2)
-
-    if best_plate is None or best_box is None:
-        return None, image, 0.0
-
-    x1, y1, x2, y2 = best_box
-    cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    cv2.putText(image, f"{best_conf:.2f}", (x1, max(y1 - 8, 10)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
-
-    logger.debug(f"[DETECT] Plate found conf={best_conf:.3f} box={best_box}")
-    return best_plate, image, best_conf
+        for box in r.boxes:
+            cls_id = int(box.cls[0])
+            if cls_id not in VEHICLE_CLASS_IDS:
+                continue
+            conf = float(box.conf[0])
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            if x2 <= x1 or y2 <= y1:
+                continue
+            vehicles.append({
+                "bbox":  (x1, y1, x2, y2),
+                "conf":  conf,
+                "label": VEHICLE_CLASS_IDS[cls_id],
+            })
+    print(f"[VEHICLES FOUND] {len(vehicles)}")
+    logger.debug(f"[VEHICLE] {len(vehicles)} vehicles found")
+    return vehicles
 
 
-# ── Full pipeline (detection + OCR) ─────────────────────────────────────────
+# ── Plate detection + OCR ─────────────────────────────────────────────────────
+
+def detect_plates(image: np.ndarray) -> list[dict]:
+    """
+    Run plate model on the full frame.
+    Returns items: {bbox, det_conf, crop}
+    """
+    model   = get_plate_model()
+    results = model.predict(
+        source  = image,
+        imgsz   = 640,
+        conf    = 0.25,
+        iou     = 0.35,
+        device  = "cpu",
+        verbose = False,
+    )
+
+    plates = []
+    if not results:
+        return plates
+
+    for r in results:
+        if r.boxes is None:
+            continue
+        for box in r.boxes:
+            conf = float(box.conf[0])
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            if x2 <= x1 or y2 <= y1:
+                continue
+            if (x2 - x1) < 20 or (y2 - y1) < 8:
+                continue
+            crop = image[y1:y2, x1:x2]
+            if crop.size == 0:
+                continue
+            plates.append({
+                "bbox":     (x1, y1, x2, y2),
+                "det_conf": conf,
+                "crop":     crop,
+            })
+    print(f"[PLATES FOUND] {len(plates)}")
+    return plates
+
+
+def read_plate_text(crop: np.ndarray) -> tuple[str, float]:
+    """
+    Enhance crop → OCR → garbage filter.
+    Returns ("", 0.0) if text is garbage or unreadable.
+    """
+    enhanced        = _enhance_plate_crop(crop)
+    ocr             = get_ocr_engine()
+    text, ocr_conf  = ocr.read_plate(enhanced)
+    # ocr.read_plate already calls apply_plate_syntax which runs is_garbage
+    # so empty string means garbage was caught there
+    return text, ocr_conf
+
+
+# ── Main pipeline ─────────────────────────────────────────────────────────────
 
 def process_license_plate(image: np.ndarray):
     """
-    Full pipeline: YOLO detection → enhanced crop → OCR.
-    Returns (plate_crop, annotated_image, plate_text, confidence).
-    plate_text is None when nothing was reliably read.
+    Full dual-model pipeline.
+
+    Returns:
+        plate_crop      : np.ndarray | None  — best plate image crop
+        annotated       : np.ndarray         — frame with all annotations
+        best_plate_text : str | None         — best plate text this frame
+        best_confidence : float              — combined confidence
     """
-    plate_crop, annotated, det_conf = detect_license_plate(image)
+    if image is None or image.size == 0:
+        return None, image, None, 0.0
 
-    if plate_crop is None:
-        return None, annotated, None, 0.0
+    annotated = image.copy()
 
-    # Apply video-specific plate enhancement before OCR
-    enhanced_crop = preprocess_plate_crop(plate_crop)
+    # ── Step 1: Detect and annotate vehicles ─────────────────────────────
+    vehicles = detect_vehicles(image)
 
-    ocr = get_ocr_engine()
-    text, ocr_conf = ocr.read_plate(enhanced_crop)
+    for v in vehicles:
+        x1, y1, x2, y2 = v["bbox"]
+        label           = v["label"]
+        conf            = v["conf"]
 
-    # Combined confidence — weight detection higher since it's more reliable
-    final_conf = 0.65 * det_conf + 0.35 * ocr_conf if text else det_conf
+        # Yellow bounding box
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), COLOR_VEHICLE, THICKNESS)
 
-    if text:
-        cv2.putText(annotated, text, (10, 35),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv2.LINE_AA)
-        logger.info(f"[OCR] '{text}' det={det_conf:.2f} ocr={ocr_conf:.2f} final={final_conf:.2f}")
-    else:
-        logger.debug(f"[OCR] No text read from plate crop (det_conf={det_conf:.2f})")
+        # Label above box: "Car 91%"
+        _draw_label(
+            annotated,
+            f"{label} {conf*100:.0f}%",
+            x1, y1 - 2,
+            color_box  = COLOR_VEHICLE,
+            color_text = (0, 0, 0),
+            scale      = 0.52,
+        )
 
-    return plate_crop, annotated, text or None, final_conf
+    # ── Step 2: Detect plates on full frame ──────────────────────────────
+    plate_detections = detect_plates(image)
+
+    best_plate_text  = None
+    best_confidence  = 0.0
+    best_crop        = None
+
+    for pd in plate_detections:
+        x1, y1, x2, y2 = pd["bbox"]
+        det_conf        = pd["det_conf"]
+
+        text, ocr_conf = read_plate_text(pd["crop"])
+
+        # Cyan plate bounding box always drawn (even if OCR failed)
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), COLOR_PLATE, THICKNESS)
+
+        if text:
+            final_conf = 0.65 * det_conf + 0.35 * ocr_conf
+
+            # Plate text label on the plate box
+            _draw_label(
+                annotated,
+                f"{text}  {final_conf*100:.0f}%",
+                x1, y1 - 2,
+                color_box  = COLOR_PLATE,
+                color_text = (0, 0, 0),
+                scale      = 0.58,
+            )
+
+            # Also print large plate text at the top-left HUD
+            cv2.putText(
+                annotated,
+                text,
+                (10, 36),
+                FONT, 1.1, COLOR_TEXT, 2, cv2.LINE_AA,
+            )
+
+            if final_conf > best_confidence:
+                best_confidence = final_conf
+                best_plate_text = text
+                best_crop       = pd["crop"]
+
+            logger.info(f"[OCR] '{text}'  det={det_conf:.2f}  ocr={ocr_conf:.2f}  final={final_conf:.2f}")
+        else:
+            logger.debug(f"[OCR] No valid text at box {pd['bbox']}")
+
+    logger.debug(f"[FRAME] {len(vehicles)} vehicles  {len(plate_detections)} plates  best='{best_plate_text}'")
+    return best_crop, annotated, best_plate_text, best_confidence
 
 
-# ── Batch video file processing ──────────────────────────────────────────────
+# ── Batch video file processing ───────────────────────────────────────────────
 
 def process_video(input_path: str, output_path: str):
-    """
-    Process a saved video file frame-by-frame.
-    Returns (success: bool, detected_plates: list[str]).
-    A plate must appear in ≥3 frames before it's counted.
-    """
-    cap = cv2.VideoCapture(input_path)
+    cap         = cv2.VideoCapture(input_path)
     output_path = output_path.rsplit(".", 1)[0] + ".mp4"
 
     if not cap.isOpened():
@@ -228,19 +349,19 @@ def process_video(input_path: str, output_path: str):
         return False, []
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")   # H264 silently fails on most servers
-    out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out    = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
 
     if not out.isOpened():
         logger.error(f"[VIDEO] VideoWriter failed: {output_path}")
         cap.release()
         return False, []
 
-    confirmed: set[str] = set()
-    local_buf: dict = defaultdict(int)    # per-video, not shared global
+    confirmed:  set[str] = set()
+    local_buf:  dict     = defaultdict(int)
     frame_n = 0
 
     while cap.isOpened():
@@ -255,7 +376,7 @@ def process_video(input_path: str, output_path: str):
         except Exception as exc:
             logger.error(f"[VIDEO] Frame {frame_n} error: {exc}")
             annotated = frame
-            ocr_text = None
+            ocr_text  = None
 
         if annotated.shape[1] != w or annotated.shape[0] != h:
             annotated = cv2.resize(annotated, (w, h))
@@ -274,6 +395,5 @@ def process_video(input_path: str, output_path: str):
 
     cap.release()
     out.release()
-
     logger.info(f"[VIDEO] Done. {frame_n} frames. Plates: {confirmed}")
     return True, list(confirmed)

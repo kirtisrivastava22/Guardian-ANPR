@@ -271,7 +271,11 @@ export default function LiveVideoUpload() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="bg-white
+  rounded-3xl
+  shadow-sm
+  border border-slate-200
+  p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold text-cyan-400 flex items-center gap-3">
@@ -288,7 +292,13 @@ export default function LiveVideoUpload() {
           {/* Main Video Section */}
           <div className="lg:col-span-2 space-y-4">
             {/* Controls */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
+            <div className=" border-2 border-dashed border-slate-300
+    rounded-3xl
+    bg-slate-800
+    p-16
+    text-center
+    hover:border-slate-500
+    transition-all">
               <h2 className="text-xl font-semibold text-white mb-4">
                 Upload & Process
               </h2>
@@ -330,7 +340,14 @@ export default function LiveVideoUpload() {
                   <button
                     onClick={connectWebSocket}
                     disabled={!!ws}
-                    className="px-6 py-2.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed font-medium transition-colors"
+                    className="px-5 py-3
+    rounded-xl
+    bg-slate-900
+    text-white
+    font-medium
+    hover:bg-slate-800
+    transition-all
+    duration-300"
                   >
                     {ws ? "Connected ✓" : "Connect"}
                   </button>
@@ -352,7 +369,14 @@ export default function LiveVideoUpload() {
 
                   <button
                     onClick={handleReset}
-                    className="px-6 py-2.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 font-medium transition-colors"
+                    className="px-5 py-3
+    rounded-xl
+    bg-slate-900
+    text-white
+    font-medium
+    hover:bg-slate-800
+    transition-all
+    duration-300"
                   >
                     Reset
                   </button>
@@ -360,7 +384,14 @@ export default function LiveVideoUpload() {
                   {detections.length > 0 && (
                     <button
                       onClick={exportDetections}
-                      className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors flex items-center gap-2"
+                      className="px-6 py-2.5
+    rounded-xl
+    bg-slate-900
+    text-white
+    font-medium
+    hover:bg-slate-800
+    transition-all
+    duration-300"
                       title="Export to CSV"
                     >
                       <Download className="w-4 h-4" />
@@ -379,7 +410,7 @@ export default function LiveVideoUpload() {
             </div>
 
             {/* Video Display */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
+            <div className="bg-slate-800 backdrop-blur rounded-xl p-6 border border-slate-700">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white">
                   Live Feed
@@ -416,7 +447,7 @@ export default function LiveVideoUpload() {
 
           {/* Detection Results Sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 sticky top-6">
+            <div className="bg-slate-800 backdrop-blur rounded-xl p-6 border border-slate-700 sticky top-6">
               <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-cyan-400" />
                 Detection Results
@@ -470,7 +501,14 @@ export default function LiveVideoUpload() {
                             onClick={() =>
                               copyToClipboard(detection.plate, actualIndex)
                             }
-                            className="p-2 hover:bg-slate-600 rounded-lg transition-colors"
+                            className="px-5 py-3
+    rounded-xl
+    bg-slate-900
+    text-white
+    font-medium
+    hover:bg-slate-800
+    transition-all
+    duration-300"
                             title="Copy to clipboard"
                           >
                             {copiedIndex === actualIndex ? (

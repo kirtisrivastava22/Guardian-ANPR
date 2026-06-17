@@ -45,7 +45,15 @@ export default function HistoryPage() {
       console.error("Failed to delete:", error)
     }
   }
+const clearHistory = async () => {
+  if (!confirm("Delete all history?")) return;
 
+  await fetch(`${API_BASE}/history/clear`, {
+    method: "DELETE"
+  });
+
+  setRecords([]);
+};
   const exportCSV = () => {
     const csv = [
       "ID,Plate Number,Confidence,Source,Timestamp",
@@ -87,34 +95,50 @@ export default function HistoryPage() {
 
   return (
     <>
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+        <div className="bg-white
+  rounded-3xl
+  shadow-sm
+  border border-slate-200
+  p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold text-cyan-400 flex items-center gap-3">
             <History className="w-10 h-10" />
             Detection History
           </h1>
-          
+          <div className="flex items-center gap-4">
+          <button
+  onClick={clearHistory}
+  className="bg-red-600 text-white px-4 py-2 rounded-lg"
+>
+  Delete All
+</button>
           {records.length > 0 && (
             <button
               onClick={exportCSV}
-              className="px-6 py-2.5 bg-purple-600 text-white rounded-lg 
-                hover:bg-purple-700 font-medium transition-colors flex items-center gap-2"
+              className="px-6 py-2.5 bg-cyan-600 text-white rounded-lg 
+                hover:bg-cyan-700 font-medium transition-colors flex items-center gap-2"
             >
               <Download className="w-5 h-5" />
               Export CSV
             </button>
           )}
+          </div>
         </div>
 
-        <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 mb-6">
+        <div className="bg-slate-800 backdrop-blur rounded-xl p-6 border border-slate-700 mb-6">
           <div className="flex items-center gap-4 flex-wrap">
-            <span className="text-slate-300 font-medium">Filter by source:</span>
+            <span className="text-slate-300 font-medium">Live Records</span>
             {["all", "image", "video", "live"].map((src) => (
               <button
                 key={src}
                 onClick={() => setFilter(src)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-5 py-3
+    rounded-xl
+    text-white
+    font-medium
+    transition-all
+    duration-300 ${
                   filter === src
                     ? "bg-cyan-600 text-white"
                     : "bg-slate-700 text-slate-300 hover:bg-slate-600"
@@ -176,7 +200,14 @@ export default function HistoryPage() {
                     
                     <button
                       onClick={() => deleteRecord(record.id)}
-                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-2 px-5 py-3
+    rounded-xl
+    bg-red-900
+    text-white
+    font-medium
+    hover:bg-slate-800
+    transition-all
+    duration-300"
                       title="Delete record"
                     >
                       <Trash2 className="w-4 h-4 text-red-400" />

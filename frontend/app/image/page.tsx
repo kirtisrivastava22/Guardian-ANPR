@@ -58,7 +58,11 @@ export default function ImagePage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+      <div className="bg-white
+  rounded-3xl
+  shadow-sm
+  border border-slate-200
+  p-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl font-bold text-cyan-400 mb-8 flex items-center gap-3">
             <Image className="w-10 h-10" />
@@ -67,7 +71,13 @@ export default function ImagePage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
+              <div className=" border-2 border-dashed border-slate-300
+    rounded-3xl
+    bg-gray-800
+    p-16
+    text-center
+    hover:border-slate-500
+    transition-all">
                 <h2 className="text-xl font-semibold text-white mb-4">
                   Upload Image
                 </h2>
@@ -112,7 +122,14 @@ export default function ImagePage() {
                   <button
                     onClick={handleUpload}
                     disabled={!file || loading}
-                    className="w-full px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed font-medium transition-colors flex items-center justify-center gap-2"
+                    className="px-5 py-3
+    rounded-xl
+    bg-slate-900
+    text-white
+    font-medium
+    hover:bg-slate-800
+    transition-all
+    duration-300"
                   >
                     {loading ? (
                       <>
@@ -159,7 +176,7 @@ export default function ImagePage() {
             </div>
 
             <div className="lg:col-span-1">
-              <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 sticky top-6">
+              <div className="bg-slate-800 backdrop-blur rounded-xl p-6 border border-slate-700 sticky top-6">
                 <h2 className="text-xl font-semibold text-white mb-4">
                   Detection Results
                 </h2>

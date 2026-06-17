@@ -20,10 +20,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 MODEL_PATH = os.path.join(
     BASE_DIR,
     "model",
-    "best.pt"
+    "best(2).pt"
 )
 
-plate_detector = PlateDetector(model_path=MODEL_PATH)
+plate_detector = PlateDetector(model_path = MODEL_PATH)
 
 @router.post("/image")
 async def detect_image(file: UploadFile = File(...)):

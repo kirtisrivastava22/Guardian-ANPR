@@ -45,3 +45,18 @@ def delete_record(record_id: int):
         return {"success": True}
     finally:
         db.close()
+
+@router.delete("/clear")
+def clear_history():
+    db = SessionLocal()
+
+    try:
+        db.query(Detection).delete()
+        db.commit()
+        print("[HISTORY] Cleared all records")
+        return {
+            "success": True
+        }
+
+    finally:
+        db.close()
