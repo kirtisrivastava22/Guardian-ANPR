@@ -15,16 +15,16 @@ export default function Navbar() {
           className="flex items-center gap-3"
         >
           <div className="h-10 w-10 rounded-xl bg-white text-slate-900 flex items-center justify-center font-bold">
-            R
+            G
           </div>
 
           <div>
             <h1 className="font-bold text-lg text-white">
-              RoadEye
+             Guardian ANPR
             </h1>
 
             <p className="text-xs text-slate-200">
-              License Plate Recognition
+              Real-Time Automatic Number Plate Recognition and Alert System
             </p>
           </div>
         </Link>

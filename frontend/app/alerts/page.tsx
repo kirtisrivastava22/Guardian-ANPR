@@ -38,7 +38,7 @@ export default function AlertsPage() {
   return (
     <div className="max-w-7xl mx-auto">
 
-      <h1 className="text-4xl font-bold mb-8 flex gap-3 items-center">
+      <h1 className="text-4xl text-red-500 font-bold mb-8 flex gap-3 items-center">
         <Bell />
         Alert Notifications
       </h1>

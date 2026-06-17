@@ -7,9 +7,9 @@ import {
 } from "../contexts/AlertContext";
 
 export const metadata = {
-  title: "RoadEye LPR",
+  title: "Guardian ANPR",
   description:
-    "License Plate Recognition System",
+    "Real-Time Automatic Number Plate Recognition and Alert System",
   icons: {
     icon: "/icon.png",
   },

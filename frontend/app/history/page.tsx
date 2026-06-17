@@ -171,7 +171,7 @@ const clearHistory = async () => {
             {filteredRecords.map((record) => (
               <div
                 key={record.id}
-                className="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 hover:border-cyan-500/50 transition-all group overflow-hidden">
+                className="bg-slate-800 backdrop-blur rounded-xl border border-slate-700 hover:border-cyan-500/50 transition-all group overflow-hidden">
                 {record.image_path && (
                   <div className="aspect-video bg-slate-900 relative overflow-hidden">
                     <img
