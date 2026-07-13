@@ -1,9 +1,10 @@
 import cv2
+import numpy as np
 
 def preprocess_plate(plate):
     gray = cv2.cvtColor(plate, cv2.COLOR_BGR2GRAY)
 
-    # Upscale (VERY IMPORTANT)
+    # Upscale 
     gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
     # Sharpen

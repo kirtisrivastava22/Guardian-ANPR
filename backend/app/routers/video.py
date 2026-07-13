@@ -29,7 +29,6 @@ MAX_IN_MEMORY = 500
 history_buffer = deque(maxlen=MAX_IN_MEMORY)
 recent_plates = {}
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 def encode_frame(frame: np.ndarray) -> str:
     _, buf = cv2.imencode(
         ".jpg",
@@ -150,10 +149,12 @@ def parse_incoming_frame(data: bytes):
             pass
 
     raise ValueError("Unknown frame format")
+
+
 async def _process_and_reply(
     ws, loop, jpeg_data: bytes, timestamp: float, source: str, frame_raw: np.ndarray = None
 ):
-    """Decode JPEG → detect+OCR → alert check → reply."""
+    # Decode JPEG → detect+OCR → alert check → reply 
 
     # Decode frame
     if frame_raw is None:
@@ -172,7 +173,6 @@ async def _process_and_reply(
     if confidence < CONF_THRESHOLD:
         plate_text = None
 
-    # ── Save detection to DB ──────────────────────────────────────────────
     if plate_text and should_save_plate(plate_text):
         _save_detection(plate_text.strip(), confidence, source,
                         video_ts=timestamp)
@@ -182,7 +182,6 @@ async def _process_and_reply(
         "confidence": confidence, "source": source,
     })
 
-    # ── Stolen vehicle alert check ────────────────────────────────────────
     alert_fired = None
     if plate_text and confidence >= 0.75:
         watchlist = _get_active_watchlist()
@@ -205,13 +204,12 @@ async def _process_and_reply(
         f"conf={confidence:.2f} "
         f"time={timestamp}"
     )
-    # ── Send normal frame response ────────────────────────────────────────
     response = {
         "frame":      encode_frame(annotated),
         "plate":      plate_text,
         "confidence": confidence,
         "timestamp":  timestamp,
-        "alert":      alert_fired,   # None normally; dict when stolen vehicle found
+        "alert":      alert_fired,   
     }
 
     try:
@@ -221,12 +219,10 @@ async def _process_and_reply(
         raise
 
 
-# ── /video ────────────────────────────────────────────────────────────────────
-
 @router.websocket("/video")
 async def video_stream_ws(ws: WebSocket):
     await ws.accept()
-    register_ws_client(ws)          # register for alert broadcasts
+    register_ws_client(ws)          
     loop = get_running_loop()
     print("[WS /video] client connected")
 
@@ -265,10 +261,9 @@ async def video_stream_ws(ws: WebSocket):
     except Exception as exc:
         print(f"[WS /video] fatal: {exc}")
     finally:
-        unregister_ws_client(ws)    # clean up on disconnect
+        unregister_ws_client(ws)    
 
 
-# ── /webcam ───────────────────────────────────────────────────────────────────
 
 @router.websocket("/webcam")
 async def webcam_ws(ws: WebSocket):

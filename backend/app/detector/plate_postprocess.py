@@ -1,20 +1,5 @@
-"""
-plate_postprocess.py
-────────────────────
-Syntax correction + garbage filtering for OCR output.
-
-Garbage filter rejects:
-  • Too short / too long
-  • Mostly non-alphanumeric
-  • Single repeated character  (LLLLLL, 000000)
-  • Common OCR noise words
-  • Does not match ANY known country pattern at all
-"""
-
 import re
 from collections import Counter
-
-# ── Character substitution maps ───────────────────────────────────────────────
 
 LETTER_TO_DIGIT = {
     'O': '0', 'Q': '0', 'D': '0',
@@ -34,29 +19,25 @@ DIGIT_TO_LETTER = {
     '8': 'B',
 }
 
-# ── Country plate syntax patterns ─────────────────────────────────────────────
-# L = letter, D = digit
-
 COUNTRY_SYNTAX = {
-    # India: KA01AB1234  (10 chars) or MH12DE1433
+    # India:
     "IN": [
-        ["L","L","D","D","L","L","D","D","D","D"],   # standard 10-char
-        ["L","L","D","D","L","D","D","D","D"],        # 9-char (some older)
+        ["L","L","D","D","L","L","D","D","D","D"],  
+        ["L","L","D","D","L","D","D","D","D"],        
     ],
-    # UK: AB12CDE (7 chars)
+    # UK:
     "UK": [
         ["L","L","D","D","L","L","L"],
     ],
-    # Germany: ABC1234 (variable, simplified)
+    # Germany:
     "DE": [
         ["L","L","L","D","D","D","D"],
         ["L","L","D","D","D","D"],
     ],
 }
 
-# OCR noise strings that should always be rejected
 _GARBAGE_WORDS = {
-    "L", "I", "O", "B", "S", "Z", "G",   # single chars
+    "L", "I", "O", "B", "S", "Z", "G",   
     "LL", "II", "OO",
     "ELE", "ELEE", "ELEL",
     "LLL", "LLLL", "LLLLL", "LLLLLL",
@@ -65,22 +46,11 @@ _GARBAGE_WORDS = {
     "NULL", "NONE", "TEST",
 }
 
-# Minimum alphanumeric length to even consider a string a plate
 _MIN_LEN = 4
 _MAX_LEN = 12
 
 
 def is_garbage(text: str) -> bool:
-    """
-    Return True if the text is clearly not a real plate number.
-    Filters applied in order (fast → slow):
-      1. Length check
-      2. Known noise word list
-      3. Repeated-character check  (≥70 % same char)
-      4. Alphanumeric ratio        (must be ≥80 % alnum)
-      5. Must contain at least one digit AND one letter
-         (pure-letter or pure-digit strings are almost always garbage)
-    """
     t = re.sub(r'[^A-Z0-9]', '', text.upper())
 
     # 1. Length
@@ -112,12 +82,6 @@ def is_garbage(text: str) -> bool:
 
 
 def apply_plate_syntax(text: str, country: str = "IN") -> str:
-    """
-    1. Strip non-alphanumeric characters.
-    2. Run garbage filter — return "" if garbage.
-    3. Try each pattern for the country; apply L/D corrections on match.
-    4. Return corrected text, or cleaned text if no pattern matched.
-    """
     text = re.sub(r'[^A-Z0-9]', '', text.upper())
 
     if not text:
@@ -142,6 +106,4 @@ def apply_plate_syntax(text: str, country: str = "IN") -> str:
 
         return "".join(corrected)
 
-    # No pattern matched length — return cleaned text as-is
-    # (still passed garbage filter so it might be valid)
     return text

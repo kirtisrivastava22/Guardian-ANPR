@@ -58,11 +58,13 @@ export default function ImagePage() {
 
   return (
     <>
-      <div className="bg-white
+      <div
+        className="bg-white
   rounded-3xl
   shadow-sm
   border border-slate-200
-  p-8">
+  p-8"
+      >
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl font-bold text-cyan-400 mb-8 flex items-center gap-3">
             <Image className="w-10 h-10" />
@@ -71,13 +73,15 @@ export default function ImagePage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <div className=" border-2 border-dashed border-slate-300
+              <div
+                className=" border-2 border-dashed border-slate-300
     rounded-3xl
     bg-gray-800
     p-16
     text-center
     hover:border-slate-500
-    transition-all">
+    transition-all"
+              >
                 <h2 className="text-xl font-semibold text-white mb-4">
                   Upload Image
                 </h2>

@@ -9,7 +9,6 @@ type Detection = {
   timestamp: string;
 };
 
-// Send at most this many frames per second to avoid flooding the WebSocket
 const TARGET_FPS = 5;
 const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
 
@@ -31,7 +30,6 @@ export default function LivePage() {
 
   const { pushAlert } = useAlert();
 
-  /* ---------- FRAME SEND LOOP ---------- */
   const sendFrames = useCallback(() => {
     const loop = (now: number) => {
       rafRef.current = requestAnimationFrame(loop);
@@ -74,7 +72,6 @@ export default function LivePage() {
     rafRef.current = requestAnimationFrame(loop);
   }, []);
 
-  /* ---------- START CAMERA ---------- */
   const start = async () => {
     if (active) return;
 
@@ -135,7 +132,7 @@ export default function LivePage() {
         img.src = `data:image/jpeg;base64,${data.frame}`;
       }
 
-      // Inline alert from video response (fires when backend sends alert alongside frame)
+    
       if (data.alert && typeof data.alert === "object" && data.alert !== null) {
         pushAlert(data.alert as Parameters<typeof pushAlert>[0]);
       }
@@ -171,7 +168,6 @@ export default function LivePage() {
     setActive(true);
   };
 
-  /* ---------- STOP ---------- */
   const stop = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -204,11 +200,10 @@ export default function LivePage() {
       ? "bg-amber-400 animate-pulse"
       : "bg-slate-500";
 
-  /* ---------- UI ---------- */
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
       <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
+    
         <h1 className="text-4xl font-bold text-cyan-400 mb-8 flex items-center gap-3">
           <Camera className="w-10 h-10" />
           Live Camera License Plate Recognition
@@ -223,7 +218,7 @@ export default function LivePage() {
                   <h2 className="text-xl font-semibold text-white">
                     Live Camera Feed
                   </h2>
-                  {/* WS status indicator */}
+              
                   <span className="flex items-center gap-1.5 text-xs text-slate-400">
                     <span className={`w-2 h-2 rounded-full ${statusColor}`} />
                     {wsStatus}
@@ -243,7 +238,7 @@ export default function LivePage() {
               </div>
 
               <div className="relative aspect-video bg-black rounded-lg overflow-hidden border-2 border-cyan-500/40">
-                {/* Raw camera (hidden behind canvas) */}
+                
                 <video
                   ref={videoRef}
                   muted
@@ -251,7 +246,7 @@ export default function LivePage() {
                   className="absolute inset-0 w-full h-full object-cover"
                 />
 
-                {/* Annotated output overlaid on top */}
+            
                 <canvas
                   ref={canvasRef}
                   className="absolute inset-0 w-full h-full pointer-events-none"
@@ -264,7 +259,7 @@ export default function LivePage() {
                 )}
               </div>
 
-              {/* FPS note */}
+            
               <p className="text-xs text-slate-500 mt-2 text-right">
                 Sending at {TARGET_FPS} fps to server
               </p>

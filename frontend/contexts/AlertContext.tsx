@@ -22,14 +22,14 @@ export type AlertPayload = {
   source: string;
   timestamp: number;
   alert_id: number | null;
-  frame: string | null; // base64 jpeg
+  frame: string | null; 
 };
 
 type AlertContextValue = {
   activeAlert: AlertPayload | null;
   alertHistory: AlertPayload[];
   dismissAlert: () => void;
-  pushAlert: (a: AlertPayload) => void; // also used by video page for inline alerts
+  pushAlert: (a: AlertPayload) => void; 
 };
 
 const AlertContext = createContext<AlertContextValue>({
@@ -83,8 +83,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     setActiveAlert(null);
   }, []);
 
-  // Dedicated alert WebSocket — receives broadcasts from alert_engine.broadcast_alert
-  // This connects separately so alerts work even on non-video pages.
+
   useEffect(() => {
     const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE ?? "";
     if (!WS_BASE) return;

@@ -5,10 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Read DB URL from environment
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Fallback for local development
 if not DATABASE_URL:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     DB_PATH = os.path.join(BASE_DIR, "detections.db")

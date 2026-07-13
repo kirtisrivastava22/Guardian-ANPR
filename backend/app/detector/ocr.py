@@ -1,14 +1,3 @@
-"""
-ocr.py
-──────
-EasyOCR wrapper. Preprocessing is now done upstream in video_pipeline.py
-before this is called, so _preprocess here is a fallback for direct callers
-(e.g. the image endpoint).
-
-Garbage filtering is handled entirely by plate_postprocess.apply_plate_syntax
-which now returns "" for garbage strings.
-"""
-
 import cv2
 import numpy as np
 from app.detector.plate_postprocess import apply_plate_syntax
@@ -65,18 +54,12 @@ class PlateOCR:
         return text, conf
 
     def _clean(self, text: str) -> str:
-        """Strip non-alnum, uppercase, apply syntax correction + garbage filter."""
         text    = "".join(c for c in text.upper() if c.isalnum())
         country = COUNTRY_CONFIG.get()
         # apply_plate_syntax now returns "" for garbage strings
         return apply_plate_syntax(text, country=country)
 
     def _preprocess(self, img: np.ndarray) -> np.ndarray:
-        """
-        Fallback preprocessing for callers that pass raw crops.
-        The WebSocket pipeline pre-enhances crops before calling read_plate,
-        so this is only used by the image upload endpoint.
-        """
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         h, w = gray.shape[:2]

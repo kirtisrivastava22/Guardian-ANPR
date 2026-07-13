@@ -1,20 +1,3 @@
-"""
-routers/watchlist.py
-────────────────────
-REST API for managing the stolen/wanted vehicle watchlist.
-
-Endpoints:
-  POST   /watchlist/           — add a vehicle
-  GET    /watchlist/           — list all active vehicles
-  DELETE /watchlist/{id}       — deactivate (soft delete)
-  POST   /watchlist/seed       — bulk import from JSON list
-  GET    /watchlist/alerts     — list all fired alerts
-  POST   /watchlist/alerts/{id}/acknowledge  — mark alert reviewed
-
-  GET    /watchlist/test-match?plate=XX00XX0000
-         — dry-run fuzzy match without firing real alert (useful for testing)
-"""
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -36,12 +19,12 @@ def get_db():
         db.close()
 
 
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
+# Pydantic schemas
 
 class VehicleIn(BaseModel):
     plate:       str
     owner_name:  Optional[str] = None
-    reason:      str = "stolen"      # "stolen" | "wanted" | "suspect"
+    reason:      str = "stolen"      
     description: Optional[str] = None
     reported_by: Optional[str] = None
 
@@ -75,10 +58,7 @@ class AlertOut(BaseModel):
         from_attributes = True
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 def _get_watchlist_dicts(db: Session) -> list[dict]:
-    """Return active watchlist as plain dicts (for alert_engine)."""
     rows = db.query(WatchlistVehicle).filter_by(active=True).all()
     return [
         {
@@ -92,11 +72,9 @@ def _get_watchlist_dicts(db: Session) -> list[dict]:
     ]
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
-
 @router.post("/", response_model=VehicleOut)
 def add_vehicle(payload: VehicleIn, db: Session = Depends(get_db)):
-    """Register a stolen/wanted vehicle."""
+    
     plate = payload.plate.upper().strip()
 
     existing = db.query(WatchlistVehicle).filter_by(plate=plate).first()
@@ -159,17 +137,6 @@ def delete_alert(alert_id: int, db: Session = Depends(get_db)):
     
 @router.post("/seed")
 def seed_watchlist(vehicles: list[VehicleIn], db: Session = Depends(get_db)):
-    """
-    Bulk import. Send a JSON array of vehicle objects.
-    Skips duplicates silently.
-
-    Example body:
-    [
-      {"plate": "MH12AB1234", "reason": "stolen",  "description": "White Swift Dzire"},
-      {"plate": "KA01XY5678", "reason": "wanted",  "owner_name": "Ram Kumar"},
-      {"plate": "DL8CAB9999", "reason": "suspect", "description": "Black Innova"}
-    ]
-    """
     added = 0
     skipped = 0
     for v in vehicles:
@@ -195,7 +162,6 @@ def list_alerts(
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
-    """Retrieve fired alerts, newest first."""
     q = db.query(Alert)
     if unacknowledged_only:
         q = q.filter_by(acknowledged=False)
@@ -204,7 +170,6 @@ def list_alerts(
 
 @router.post("/alerts/{alert_id}/acknowledge")
 def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
-    """Operator marks an alert as reviewed."""
     alert = db.query(Alert).filter_by(id=alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -215,17 +180,10 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
 
 @router.get("/test-match")
 def test_match(plate: str, db: Session = Depends(get_db)):
-    """
-    Dry-run fuzzy matching for a given plate string.
-    Useful to verify your watchlist and tune thresholds before going live.
-
-    GET /watchlist/test-match?plate=MH12AB1Z34
-    """
     watchlist = _get_watchlist_dicts(db)
     if not watchlist:
         return {"result": "no_watchlist", "message": "Watchlist is empty"}
 
-    # Show top 3 matches with scores
     scored = sorted(
         [{"plate": w["plate"], "score": plate_match_score(plate.upper(), w["plate"]),
           "reason": w["reason"]} for w in watchlist],
