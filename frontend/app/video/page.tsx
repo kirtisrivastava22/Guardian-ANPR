@@ -7,7 +7,7 @@ interface DetectionResult {
   confidence: number;
   videoTimestamp: string;
   frameTime: number;
-  id: string; // Add unique ID for better tracking
+  id: string;
 }
 
 export default function LiveVideoUpload() {

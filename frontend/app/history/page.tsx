@@ -34,7 +34,7 @@ export default function HistoryPage() {
   }
 
   const deleteRecord = async (id: number) => {
-    // if (!confirm("Delete this record?")) return
+    if (!confirm("Delete this record?")) return
     
     try {
       await fetch(`${API_BASE}/history/${id}`, {
