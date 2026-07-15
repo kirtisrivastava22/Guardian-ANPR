@@ -12,7 +12,6 @@ import numpy as np
 logger = logging.getLogger("alert")
 logger.setLevel(logging.DEBUG)
 
-
 MIN_CONFIDENCE   = float(os.getenv("ALERT_MIN_CONF",    "0.75"))  
 MIN_MATCH_SCORE  = float(os.getenv("ALERT_MIN_MATCH",   "0.80"))  
 COOLDOWN_SEC     = int(os.getenv("ALERT_COOLDOWN_SEC",  "30"))   
@@ -81,8 +80,10 @@ def find_watchlist_match(
             best_score  = score
             best_entry  = entry
 
-    if best_score >= min_score:
-        return {**best_entry, "match_score": best_score}
+    if best_score >= min_score and best_entry is not None:
+        result = dict(best_entry)
+        result["match_score"] = best_score
+        return result
     return None
 
 
