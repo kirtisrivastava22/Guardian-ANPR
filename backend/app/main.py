@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
-
-from app.routers import image, history, video, watchlist, alerts_ws   # ← added alerts_ws
+from app.routers import image, history, video, watchlist, alerts_ws 
 from app.database import engine
 from app.models import Base
 from app.config import COUNTRY_CONFIG
@@ -23,7 +22,7 @@ os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(VIDEO_DIR, exist_ok=True)
 
 # ---------- APP ----------
-app = FastAPI(title="RoadEye LPR API")
+app = FastAPI(title="Guardian LPR API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,7 +41,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # ---------- ROUTERS ----------
 app.include_router(image.router,    prefix="/detect",    tags=["Detection"])
 app.include_router(video.router,    prefix="/ws",        tags=["WebSocket"])
-app.include_router(alerts_ws.router,prefix="/ws",        tags=["WebSocket"])  # ← /ws/alerts
+app.include_router(alerts_ws.router,prefix="/ws",        tags=["WebSocket"]) 
 app.include_router(history.router,  prefix="/history",   tags=["History"])
 app.include_router(watchlist.router,prefix="/watchlist", tags=["Watchlist"])
 
